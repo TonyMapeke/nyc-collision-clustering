@@ -6,14 +6,22 @@ Bronx collision hotspot API.
 
 from fastapi import FastAPI, HTTPException, Query
 from sqlalchemy import text
-
 from api.database import engine
 from api.schemas import HeatmapPoint, Hotspot, NearbyHotspot
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Bronx Collision Hotspot API",
     description="Severity-weighted collision hotspots and density heatmap for the Bronx.",
     version="0.1.0",
+)
+
+# the frontend runs on a different port, so the browser needs permission to call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5500", "http://127.0.0.1:5500"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
 )
 
 # TRIM because the NYC data pads street names with trailing spaces
