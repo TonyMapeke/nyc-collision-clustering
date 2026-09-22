@@ -88,3 +88,42 @@ fetch(`${API_URL}/heatmap`)
   .then((res) => res.json())
   .then(drawHeatmap)
   .catch((err) => console.error("Couldn't load heatmap:", err));
+
+// data comes from our db but escape it anyway before it goes into html
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function popupHtml(h) {
+  const street = h.top_street ? escapeHtml(h.top_street) : "Unnamed location"; // 715 clusters have no street
+  return `
+    <strong>${street}</strong><br>
+    Danger score: ${h.danger_score.toFixed(2)}<br>
+    Crashes: ${h.crash_count}<br>
+    Injured: ${Math.round(h.total_injured)}<br>
+    Killed: ${Math.round(h.total_killed)}<br>
+    Crashes with injuries: ${Math.round(h.injury_rate)}%<br>
+    Top factor: ${escapeHtml(h.top_factor ?? "Unknown")}<br>
+    <small>${Math.round(h.distance_meters)} m from where you clicked</small>
+  `;
+}
+
+map.on("click", (e) => {
+  const { lat, lng } = e.latlng; // leaflet calls it lng, the api calls it lon
+  fetch(`${API_URL}/hotspots/nearby?lat=${lat}&lon=${lng}&radius=500&limit=1`)
+    .then((res) => res.json())
+    .then((hotspots) => {
+      if (hotspots.length === 0) {
+        L.popup().setLatLng(e.latlng).setContent("No hotspots within 500 m").openOn(map);
+        return;
+      }
+      const h = hotspots[0];
+      L.popup()
+        .setLatLng([h.center_lat, h.center_lon]) // open on the hotspot, not the click
+        .setContent(popupHtml(h))
+        .openOn(map);
+    })
+    .catch((err) => console.error("Couldn't load nearby hotspots:", err));
+});

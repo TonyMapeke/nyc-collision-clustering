@@ -50,6 +50,9 @@ CREATE TABLE heatmap_points (
 CREATE INDEX idx_hotspots_geom ON hotspots USING GIST (geom);
 CREATE INDEX idx_heatmap_points_geom ON heatmap_points USING GIST (geom);
 
+-- /nearby casts geom to geography for meters, which can't use the index above
+CREATE INDEX idx_hotspots_geog ON hotspots USING GIST ((geom::geography));
+
 -- ============================================================
 -- BACKFILL GEOM: populate geometry columns from lat/lon
 -- Run AFTER loading data (scripts/load_to_postgres.py). Safe to re-run --
