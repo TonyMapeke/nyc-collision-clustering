@@ -1,0 +1,11 @@
+pandas
+geopandas
+shapely
+scikit-learn
+scipy
+seaborn
+matplotlib
+sqlalchemy
+psycopg2-binary
+python-dotenv
+fastapi[standard]
