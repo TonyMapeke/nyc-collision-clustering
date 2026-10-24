@@ -20,6 +20,7 @@ class Hotspot(BaseModel):
     fatal_crash_count: int
     injury_rate: float
     danger_score: float
+    danger_rank: int  # 1 = most dangerous
     top_factor: Optional[str] = None
 
 

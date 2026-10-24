@@ -28,7 +28,7 @@ app.add_middleware(
 HOTSPOT_COLUMNS = """
     cluster, crash_count, center_lat, center_lon, TRIM(top_street) AS top_street,
     total_injured, total_killed, fatal_crash_count, injury_rate,
-    danger_score, top_factor
+    danger_score, danger_rank, top_factor
 """
 
 # ::geography so distances come back in meters, not degrees

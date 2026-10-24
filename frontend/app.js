@@ -89,6 +89,15 @@ fetch(`${API_URL}/heatmap`)
   .then(drawHeatmap)
   .catch((err) => console.error("Couldn't load heatmap:", err));
 
+const TOTAL_HOTSPOTS = 4465;
+
+// 1 -> 1st, 2 -> 2nd, 11 -> 11th, 22 -> 22nd
+function ordinal(n) {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n.toLocaleString() + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
 // data comes from our db but escape it anyway before it goes into html
 function escapeHtml(text) {
   const div = document.createElement("div");
@@ -100,13 +109,13 @@ function popupHtml(h) {
   const street = h.top_street ? escapeHtml(h.top_street) : "Unnamed location"; // 715 clusters have no street
   return `
     <strong>${street}</strong><br>
-    Danger score: ${h.danger_score.toFixed(2)}<br>
+    Ranked ${ordinal(h.danger_rank)} most dangerous of ${TOTAL_HOTSPOTS.toLocaleString()}<br>
     Crashes: ${h.crash_count}<br>
     Injured: ${Math.round(h.total_injured)}<br>
     Killed: ${Math.round(h.total_killed)}<br>
     Crashes with injuries: ${Math.round(h.injury_rate)}%<br>
     Top factor: ${escapeHtml(h.top_factor ?? "Unknown")}<br>
-    <small>${Math.round(h.distance_meters)} m from where you clicked</small>
+    <small>Danger score ${h.danger_score.toFixed(2)} &middot; ${Math.round(h.distance_meters)} m from where you clicked</small>
   `;
 }
 

@@ -35,6 +35,7 @@ CREATE TABLE hotspots (
     fatal_crash_count INTEGER,
     injury_rate DOUBLE PRECISION,
     danger_score DOUBLE PRECISION,
+    danger_rank INTEGER,
     top_factor TEXT,
     geom GEOMETRY(Point, 4326)
 );
@@ -66,3 +67,12 @@ WHERE geom IS NULL;
 UPDATE heatmap_points
 SET geom = ST_SetSRID(ST_MakePoint(lon, lat), 4326)
 WHERE geom IS NULL;
+
+-- 1 = most dangerous. window functions can't go in SET directly, so rank in a subquery
+UPDATE hotspots h
+SET danger_rank = r.danger_rank
+FROM (
+    SELECT cluster, RANK() OVER (ORDER BY danger_score DESC) AS danger_rank
+    FROM hotspots
+) r
+WHERE h.cluster = r.cluster;
