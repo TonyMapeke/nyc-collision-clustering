@@ -59,7 +59,7 @@ def load_hotspots():
     hotspots_cols = [
         "cluster", "crash_count", "center_lat", "center_lon", "top_street",
         "total_injured", "total_killed", "fatal_crash_count", "injury_rate",
-        "danger_score", "top_factor",
+        "danger_score", "top_factor", "cross_street",
     ]
     hotspots_df = cluster_summary[hotspots_cols]
 

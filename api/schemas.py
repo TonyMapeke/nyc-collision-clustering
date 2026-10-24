@@ -22,6 +22,7 @@ class Hotspot(BaseModel):
     danger_score: float
     danger_rank: int  # 1 = most dangerous
     top_factor: Optional[str] = None
+    cross_street: Optional[str] = None
 
 
 class NearbyHotspot(Hotspot):

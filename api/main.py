@@ -28,7 +28,7 @@ app.add_middleware(
 HOTSPOT_COLUMNS = """
     cluster, crash_count, center_lat, center_lon, TRIM(top_street) AS top_street,
     total_injured, total_killed, fatal_crash_count, injury_rate,
-    danger_score, danger_rank, top_factor
+    danger_score, danger_rank, top_factor, TRIM(cross_street) AS cross_street
 """
 
 # ::geography so distances come back in meters, not degrees
@@ -58,14 +58,14 @@ def search_hotspots(
     query: str = Query(..., min_length=2, description="Street name to search for"),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """Street name search. Substring match, case-insensitive."""
+    """Street name search on either street. Substring match, case-insensitive."""
     with engine.connect() as conn:
         rows = conn.execute(
             text(
                 f"""
                 SELECT {HOTSPOT_COLUMNS}
                 FROM hotspots
-                WHERE top_street ILIKE :pattern
+                WHERE top_street ILIKE :pattern OR cross_street ILIKE :pattern
                 ORDER BY danger_score DESC
                 LIMIT :limit
                 """

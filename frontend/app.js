@@ -106,7 +106,9 @@ function escapeHtml(text) {
 }
 
 function popupHtml(h) {
-  const street = h.top_street ? escapeHtml(h.top_street) : "Unnamed location"; // 715 clusters have no street
+  // "Road & Cross Street", whichever parts exist
+  const names = [h.top_street, h.cross_street].filter(Boolean);
+  const street = names.length ? escapeHtml(names.join(" & ")) : "Unnamed location";
   return `
     <strong>${street}</strong><br>
     Ranked ${ordinal(h.danger_rank)} most dangerous of ${TOTAL_HOTSPOTS.toLocaleString()}<br>

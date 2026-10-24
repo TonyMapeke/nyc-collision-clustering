@@ -37,6 +37,7 @@ CREATE TABLE hotspots (
     danger_score DOUBLE PRECISION,
     danger_rank INTEGER,
     top_factor TEXT,
+    cross_street TEXT,
     geom GEOMETRY(Point, 4326)
 );
 
