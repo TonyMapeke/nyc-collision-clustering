@@ -5,6 +5,7 @@ const BRONX_BOUNDS = L.latLngBounds([40.78, -73.95], [40.92, -73.74]);
 const map = L.map("map", {
   maxBounds: BRONX_BOUNDS.pad(0.5), // some room around the edges so it doesn't feel too tight
   maxBoundsViscosity: 1.0,          // hard wall, can't drag past
+  preferCanvas: true,               // 4,465 circles draw much faster on canvas than as svg
 }).fitBounds(BRONX_BOUNDS);
 
 map.setMinZoom(map.getZoom() - 1);
@@ -48,6 +49,8 @@ function colorFor(t) {
   return HEAT_COLORS[HEAT_COLORS.length - 1][1];
 }
 
+let heatLayer = null;
+
 // grid is already smoothed from the KDE, so just draw it
 function drawHeatmap(points) {
   const lats = [...new Set(points.map((p) => p.lat))].sort((a, b) => a - b);
@@ -81,7 +84,8 @@ function drawHeatmap(points) {
     [lats[0] - latStep / 2, lons[0] - lonStep / 2],
     [lats[rows - 1] + latStep / 2, lons[cols - 1] + lonStep / 2]
   );
-  L.imageOverlay(canvas.toDataURL(), bounds).addTo(map);
+  heatLayer = L.imageOverlay(canvas.toDataURL(), bounds).addTo(map);
+  updateLayers();
 }
 
 fetch(`${API_URL}/heatmap`)
@@ -89,7 +93,7 @@ fetch(`${API_URL}/heatmap`)
   .then(drawHeatmap)
   .catch((err) => console.error("Couldn't load heatmap:", err));
 
-const TOTAL_HOTSPOTS = 4465;
+let TOTAL_HOTSPOTS = 4465; // replaced with the real count once /hotspots loads
 
 // 1 -> 1st, 2 -> 2nd, 11 -> 11th, 22 -> 22nd
 function ordinal(n) {
@@ -117,7 +121,7 @@ function popupHtml(h) {
     Killed: ${Math.round(h.total_killed)}<br>
     Crashes with injuries: ${Math.round(h.injury_rate)}%<br>
     Top factor: ${escapeHtml(h.top_factor ?? "Unknown")}<br>
-    <small>Danger score ${h.danger_score.toFixed(2)} &middot; ${Math.round(h.distance_meters)} m from where you clicked</small>
+    <small>Danger score ${h.danger_score.toFixed(2)}${h.distance_meters != null ? ` &middot; ${Math.round(h.distance_meters)} m from where you clicked` : ""}</small>
   `;
 }
 
@@ -138,3 +142,48 @@ map.on("click", (e) => {
     })
     .catch((err) => console.error("Couldn't load nearby hotspots:", err));
 });
+
+// zoomed out: heatmap shows which areas are dangerous
+// zoomed in: circles show the actual hotspots
+const DETAIL_ZOOM = 16;
+const hotspotLayer = L.layerGroup();
+
+// color by rank tier
+function rankColor(rank) {
+  if (rank <= 50) return "#bd0026";
+  if (rank <= 500) return "#f03b20";
+  if (rank <= 1500) return "#fd8d3c";
+  return "#fecc5c";
+}
+
+function drawHotspots(hotspots) {
+  TOTAL_HOTSPOTS = hotspots.length;
+  // api sends most dangerous first, so add in reverse to draw those on top
+  for (const h of [...hotspots].reverse()) {
+    L.circleMarker([h.center_lat, h.center_lon], {
+      radius: Math.min(14, Math.max(4, Math.sqrt(h.crash_count))), // sqrt so huge clusters don't cover everything
+      color: "#ffffff",
+      weight: 1,
+      fillColor: rankColor(h.danger_rank),
+      fillOpacity: 0.9,
+      bubblingMouseEvents: false, // clicking a circle shouldn't also trigger the map's /nearby click
+    })
+      .bindPopup(() => popupHtml(h))
+      .addTo(hotspotLayer);
+  }
+  updateLayers();
+}
+
+function updateLayers() {
+  const zoomedIn = map.getZoom() >= DETAIL_ZOOM;
+  if (heatLayer) heatLayer.setOpacity(zoomedIn ? 0.15 : 1); // keep a faint heatmap for context
+  if (zoomedIn) hotspotLayer.addTo(map);
+  else hotspotLayer.remove();
+}
+
+map.on("zoomend", updateLayers);
+
+fetch(`${API_URL}/hotspots`)
+  .then((res) => res.json())
+  .then(drawHotspots)
+  .catch((err) => console.error("Couldn't load hotspots:", err));
