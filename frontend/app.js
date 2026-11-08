@@ -55,8 +55,31 @@ function colorFor(t) {
 
 let heatLayer = null;
 
+// geojson can be a Polygon or MultiPolygon (the Bronx includes City Island), flatten to a list of rings
+function boundaryRings(geojson) {
+  const rings = [];
+  for (const f of geojson.features) {
+    const polygons = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const polygon of polygons) rings.push(...polygon);
+  }
+  return rings;
+}
+
+// dim everything outside the borough and draw its outline
+function drawBoundary(geojson) {
+  const rings = boundaryRings(geojson).map((ring) => ring.map(([lon, lat]) => [lat, lon])); // geojson is lon, lat
+  const world = [[85, -180], [85, 180], [-85, 180], [-85, -180]];
+  // first ring is the outer edge, the rest are holes, so this covers everything except the bronx
+  L.polygon([world, ...rings], { stroke: false, fillColor: "#1e2a33", fillOpacity: 0.12, interactive: false }).addTo(map);
+  L.polygon(rings, { color: "#1e2a33", weight: 1.5, opacity: 0.6, fill: false, interactive: false }).addTo(map);
+}
+
+// leaflet stretches overlays in web mercator, so the clip shape has to be placed in mercator too
+const toRad = (deg) => (deg * Math.PI) / 180;
+const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + toRad(lat) / 2));
+
 // grid is already smoothed from the KDE, so just draw it
-function drawHeatmap(points) {
+function drawHeatmap(points, boundary) {
   const lats = [...new Set(points.map((p) => p.lat))].sort((a, b) => a - b);
   const lons = [...new Set(points.map((p) => p.lon))].sort((a, b) => a - b);
   const rows = lats.length;
@@ -88,13 +111,45 @@ function drawHeatmap(points) {
     [lats[0] - latStep / 2, lons[0] - lonStep / 2],
     [lats[rows - 1] + latStep / 2, lons[cols - 1] + lonStep / 2]
   );
-  heatLayer = L.imageOverlay(canvas.toDataURL(), bounds).addTo(map);
+  let output = canvas;
+  if (boundary) {
+    // upscale first so the borough edge is crisp, then keep only the pixels inside the outline
+    const [south, west, north, east] = [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()];
+    output = document.createElement("canvas");
+    output.width = 1200;
+    output.height = Math.round((output.width * (mercY(north) - mercY(south))) / toRad(east - west));
+    const big = output.getContext("2d");
+    big.imageSmoothingEnabled = true;
+    big.drawImage(canvas, 0, 0, output.width, output.height);
+    big.globalCompositeOperation = "destination-in";
+    big.beginPath();
+    for (const ring of boundaryRings(boundary)) {
+      ring.forEach(([lon, lat], i) => {
+        const x = ((lon - west) / (east - west)) * output.width;
+        const y = ((mercY(north) - mercY(lat)) / (mercY(north) - mercY(south))) * output.height;
+        if (i === 0) big.moveTo(x, y);
+        else big.lineTo(x, y);
+      });
+      big.closePath();
+    }
+    big.fill("evenodd");
+  }
+
+  heatLayer = L.imageOverlay(output.toDataURL(), bounds).addTo(map);
   updateLayers();
 }
 
-fetch(`${API_URL}/heatmap`)
-  .then((res) => res.json())
-  .then(drawHeatmap)
+// the outline is a static file next to index.html, made by scripts/export_boundary.py
+const boundaryRequest = fetch("bronx_boundary.geojson")
+  .then((res) => (res.ok ? res.json() : null))
+  .catch(() => null); // no outline file, so the heatmap just isn't clipped
+
+Promise.all([fetch(`${API_URL}/heatmap`).then((res) => res.json()), boundaryRequest])
+  .then(([points, boundary]) => {
+    if (boundary) drawBoundary(boundary);
+    else console.warn("No bronx_boundary.geojson, run scripts/export_boundary.py");
+    drawHeatmap(points, boundary);
+  })
   .catch((err) => console.error("Couldn't load heatmap:", err));
 
 let TOTAL_HOTSPOTS = 4465; // replaced with the real count once /hotspots loads
