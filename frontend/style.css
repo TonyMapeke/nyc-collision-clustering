@@ -7,37 +7,86 @@ body {
 #map {
   height: 100%;
 }
-/* floats over the map, above leaflet's panes */
-#search {
+/* colors: sign green is only for the title, the yellow-to-red ramp is only for data */
+:root {
+  --sign-green: #006b3f;
+  --ink: #1e2a33;
+  --muted: #5e6b73;
+  --line: #d9dee2;
+  --panel: #ffffff;
+  --tier-1: #bd0026;
+  --tier-2: #f03b20;
+  --tier-3: #fd8d3c;
+  --tier-4: #fecc5c;
+  --shadow: 0 1px 2px rgba(30, 42, 51, 0.12), 0 6px 18px rgba(30, 42, 51, 0.1);
+  --font: "Overpass", system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+}
+
+/* ---------- title and search ---------- */
+
+#panel {
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 1000;
-  width: 320px;
-  font-family: system-ui, sans-serif;
+  z-index: 1000; /* above leaflet's panes */
+  width: min(340px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 10px 10px 12px;
+  background: var(--panel);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+/* styled like an nyc street name sign: green plate, thin white inset border */
+.sign {
+  margin: 0;
+  padding: 9px 14px 6px;
+  background: var(--sign-green);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 3px var(--sign-green), inset 0 0 0 5px #fff;
+}
+
+.intro {
+  margin: 10px 4px 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 #search-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px;
+  padding: 10px 12px 8px;
+  font: inherit;
   font-size: 15px;
-  border: 1px solid #ccc;
+  color: var(--ink);
+  border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+#search-input:focus {
+  outline: 2px solid var(--sign-green);
+  outline-offset: 1px;
+  border-color: transparent;
 }
 
 #search-results {
   list-style: none;
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   padding: 0;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  max-height: 60vh;
+  max-height: 50vh;
   overflow-y: auto;
 }
 
-/* no box when there are no results */
 #search-results:empty {
   display: none;
 }
@@ -46,10 +95,12 @@ body {
 #search-results .empty {
   display: block;
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 8px 6px;
   text-align: left;
   font: inherit;
   font-size: 14px;
+  color: var(--ink);
+  border-radius: 6px;
 }
 
 #search-results button {
@@ -59,12 +110,165 @@ body {
 }
 
 #search-results button:hover,
-#search-results button:focus {
-  background: #f3f3f3;
+#search-results button:focus-visible {
+  background: #eef2f0;
+  outline: none;
 }
 
 #search-results .meta {
   display: block;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
+}
+
+#search-results .empty {
+  color: var(--muted);
+}
+
+/* ---------- legend ---------- */
+
+#legend {
+  position: absolute;
+  left: 12px;
+  bottom: 24px;
+  z-index: 1000;
+  width: 220px;
+  padding: 12px 14px 10px;
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+
+#legend h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+#legend .ramp {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #ffffb2, #fecc5c, #fd8d3c, #f03b20, #bd0026);
+}
+
+#legend .ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+#legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+#legend .note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.tier-1 { background: var(--tier-1); }
+.tier-2 { background: var(--tier-2); }
+.tier-3 { background: var(--tier-3); }
+.tier-4 { background: var(--tier-4); }
+
+/* ---------- hotspot popup ---------- */
+
+.hs-popup .leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.hs-popup .leaflet-popup-content {
+  margin: 14px 16px 12px;
+  width: 264px;
+  font-family: var(--font);
+  color: var(--ink);
+}
+
+.hs-name {
+  margin: 0 18px 6px 0; /* room for the close button */
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.hs-rank {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hs-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  align-items: end; /* values line up even if a label wraps */
+  margin: 0 0 12px;
+}
+
+.hs-stats div {
+  margin: 0;
+}
+
+.hs-stats dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hs-stats dd {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.hs-stats .deadly {
+  color: var(--tier-1);
+}
+
+.hs-cause {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.hs-foot {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hs-popup .leaflet-popup-content p.hs-empty {
+  margin: 0;
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-zoom-anim .leaflet-zoom-animated {
+    transition: none !important;
+  }
 }

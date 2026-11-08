@@ -113,24 +113,49 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// source data is all caps, "EAST 138 STREET" -> "East 138 Street"
+function titleCase(text) {
+  return text.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
 // "Road & Cross Street", whichever parts exist
 function hotspotName(h) {
-  const names = [h.top_street, h.cross_street].filter(Boolean);
+  const names = [h.top_street, h.cross_street].filter(Boolean).map(titleCase);
   return names.length ? names.join(" & ") : "Unnamed location";
 }
 
+// same tiers as the circle colors
+function rankTier(rank) {
+  if (rank <= 50) return 1;
+  if (rank <= 500) return 2;
+  if (rank <= 1500) return 3;
+  return 4;
+}
+
+// "Unspecified" means the police report didn't record a cause
+function causeText(factor) {
+  if (!factor || factor === "Unspecified") return "Not recorded";
+  return factor;
+}
+
 function popupHtml(h) {
+  const killed = Math.round(h.total_killed);
+  const distance = h.distance_meters != null ? `<span>${Math.round(h.distance_meters)} m from where you clicked</span>` : "";
   return `
-    <strong>${escapeHtml(hotspotName(h))}</strong><br>
-    Ranked ${ordinal(h.danger_rank)} most dangerous of ${TOTAL_HOTSPOTS.toLocaleString()}<br>
-    Crashes: ${h.crash_count}<br>
-    Injured: ${Math.round(h.total_injured)}<br>
-    Killed: ${Math.round(h.total_killed)}<br>
-    Crashes with injuries: ${Math.round(h.injury_rate)}%<br>
-    Top factor: ${escapeHtml(h.top_factor ?? "Unknown")}<br>
-    <small>Danger score ${h.danger_score.toFixed(2)}${h.distance_meters != null ? ` &middot; ${Math.round(h.distance_meters)} m from where you clicked` : ""}</small>
+    <h2 class="hs-name">${escapeHtml(hotspotName(h))}</h2>
+    <p class="hs-rank"><span class="dot tier-${rankTier(h.danger_rank)}"></span>Ranked ${ordinal(h.danger_rank)} of ${TOTAL_HOTSPOTS.toLocaleString()} for danger</p>
+    <dl class="hs-stats">
+      <div><dt>Crashes</dt><dd>${h.crash_count.toLocaleString()}</dd></div>
+      <div><dt>People killed</dt><dd class="${killed > 0 ? "deadly" : ""}">${killed}</dd></div>
+      <div><dt>People injured</dt><dd>${Math.round(h.total_injured).toLocaleString()}</dd></div>
+      <div><dt>Crashes with injuries</dt><dd>${Math.round(h.injury_rate)}%</dd></div>
+    </dl>
+    <p class="hs-cause">Most common cause: ${escapeHtml(causeText(h.top_factor))}</p>
+    <p class="hs-foot">Danger score ${h.danger_score.toFixed(2)} ${distance ? "<br>" + distance : ""}</p>
   `;
 }
+
+const POPUP_OPTIONS = { className: "hs-popup", maxWidth: 300 };
 
 map.on("click", (e) => {
   const { lat, lng } = e.latlng; // leaflet calls it lng, the api calls it lon
@@ -138,11 +163,11 @@ map.on("click", (e) => {
     .then((res) => res.json())
     .then((hotspots) => {
       if (hotspots.length === 0) {
-        L.popup().setLatLng(e.latlng).setContent("No hotspots within 500 m").openOn(map);
+        L.popup(POPUP_OPTIONS).setLatLng(e.latlng).setContent('<p class="hs-empty">No hotspots within 500 m. Try clicking closer to a main road.</p>').openOn(map);
         return;
       }
       const h = hotspots[0];
-      L.popup()
+      L.popup(POPUP_OPTIONS)
         .setLatLng([h.center_lat, h.center_lon]) // open on the hotspot, not the click
         .setContent(popupHtml(h))
         .openOn(map);
@@ -155,12 +180,11 @@ map.on("click", (e) => {
 const DETAIL_ZOOM = 16;
 const hotspotLayer = L.layerGroup();
 
-// color by rank tier
+// color by rank tier, matching the legend and popup dots
+const TIER_COLORS = { 1: "#bd0026", 2: "#f03b20", 3: "#fd8d3c", 4: "#fecc5c" };
+
 function rankColor(rank) {
-  if (rank <= 50) return "#bd0026";
-  if (rank <= 500) return "#f03b20";
-  if (rank <= 1500) return "#fd8d3c";
-  return "#fecc5c";
+  return TIER_COLORS[rankTier(rank)];
 }
 
 function drawHotspots(hotspots) {
@@ -175,7 +199,7 @@ function drawHotspots(hotspots) {
       fillOpacity: 0.9,
       bubblingMouseEvents: false, // clicking a circle shouldn't also trigger the map's /nearby click
     })
-      .bindPopup(() => popupHtml(h))
+      .bindPopup(() => popupHtml(h), POPUP_OPTIONS)
       .addTo(hotspotLayer);
   }
   updateLayers();
@@ -186,6 +210,30 @@ function updateLayers() {
   if (heatLayer) heatLayer.setOpacity(zoomedIn ? 0.15 : 1); // keep a faint heatmap for context
   if (zoomedIn) hotspotLayer.addTo(map);
   else hotspotLayer.remove();
+  renderLegend(zoomedIn);
+}
+
+// legend explains whichever layer is showing
+const legend = document.getElementById("legend");
+
+function renderLegend(zoomedIn) {
+  if (zoomedIn) {
+    legend.innerHTML = `
+      <h2>Hotspots by danger rank</h2>
+      <ul>
+        <li><span class="dot tier-1"></span>Top 50</li>
+        <li><span class="dot tier-2"></span>51 to 500</li>
+        <li><span class="dot tier-3"></span>501 to 1,500</li>
+        <li><span class="dot tier-4"></span>All others</li>
+      </ul>
+      <p class="note">Bigger circles had more crashes.</p>`;
+  } else {
+    legend.innerHTML = `
+      <h2>Injuries and deaths</h2>
+      <div class="ramp"></div>
+      <div class="ends"><span>Fewer</span><span>More</span></div>
+      <p class="note">Zoom in to see individual hotspots.</p>`;
+  }
 }
 
 map.on("zoomend", updateLayers);
@@ -196,6 +244,7 @@ fetch(`${API_URL}/hotspots`)
   .catch((err) => console.error("Couldn't load hotspots:", err));
 
 // search: type a street, pick a hotspot, map flies there
+const REDUCE_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const searchInput = document.getElementById("search-input");
 const searchResults = document.getElementById("search-results");
 let searchTimer = null;
@@ -211,10 +260,11 @@ function goToHotspot(h) {
   clearResults();
   searchInput.value = hotspotName(h); // show what was picked
   searchInput.blur();
-  map.flyTo([h.center_lat, h.center_lon], 17, { duration: 1.2 });
+  if (REDUCE_MOTION) map.setView([h.center_lat, h.center_lon], 17);
+  else map.flyTo([h.center_lat, h.center_lon], 17, { duration: 1.2 });
   // wait for the fly animation to finish, or the popup's auto-pan fights it
   map.once("moveend", () => {
-    L.popup().setLatLng([h.center_lat, h.center_lon]).setContent(popupHtml(h)).openOn(map);
+    L.popup(POPUP_OPTIONS).setLatLng([h.center_lat, h.center_lon]).setContent(popupHtml(h)).openOn(map);
   });
 }
 
@@ -235,7 +285,7 @@ function showResults(hotspots) {
       button.textContent = hotspotName(h);
       const meta = document.createElement("span");
       meta.className = "meta";
-      meta.textContent = `Ranked ${ordinal(h.danger_rank)} \u00b7 ${h.crash_count} crashes`;
+      meta.textContent = `Ranked ${ordinal(h.danger_rank)}, ${h.crash_count.toLocaleString()} crashes`;
       button.append(meta);
       button.addEventListener("click", () => goToHotspot(h));
       const li = document.createElement("li");
@@ -275,3 +325,5 @@ searchInput.addEventListener("keydown", (e) => {
 });
 
 map.on("click", clearResults);
+
+renderLegend(false);

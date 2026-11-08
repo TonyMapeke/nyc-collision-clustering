@@ -4,16 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bronx Collision Hotspots</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="map"></div>
 
-  <div id="search">
-    <input id="search-input" type="search" placeholder="Search a street, like Fordham Road" autocomplete="off" aria-label="Search streets">
+  <div id="panel">
+    <h1 class="sign">Bronx Crash Hotspots</h1>
+    <p class="intro">Where crashes have injured and killed the most people, 2012 to 2026. Search a street or click the map.</p>
+    <input id="search-input" type="search" placeholder="Fordham Road" autocomplete="off" aria-label="Search for a street">
     <ul id="search-results"></ul>
   </div>
+
+  <div id="legend" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js"></script>
