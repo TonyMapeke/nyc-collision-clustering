@@ -52,6 +52,16 @@ def get_heatmap():
     return rows
 
 
+@app.get("/hotspots", response_model=list[Hotspot])
+def get_all_hotspots():
+    """Every hotspot, most dangerous first. Powers the circles when zoomed in."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(f"SELECT {HOTSPOT_COLUMNS} FROM hotspots ORDER BY danger_rank")
+        ).mappings().all()
+    return rows
+
+
 # /search and /nearby must stay above /{cluster_id} or they'd match it first
 @app.get("/hotspots/search", response_model=list[Hotspot])
 def search_hotspots(
