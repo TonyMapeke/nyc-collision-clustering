@@ -5,15 +5,18 @@ const BRONX_BOUNDS = L.latLngBounds([40.78, -73.95], [40.92, -73.74]);
 const map = L.map("map", {
   maxBounds: BRONX_BOUNDS.pad(0.5), // some room around the edges so it doesn't feel too tight
   maxBoundsViscosity: 1.0,          // hard wall, can't drag past
-  preferCanvas: true,               // 4,465 circles draw much faster on canvas than as svg
+  preferCanvas: true,
+  zoomControl: false,               // re-added bottom right so it doesn't sit under the search bar               // 4,465 circles draw much faster on canvas than as svg
 }).fitBounds(BRONX_BOUNDS);
 
 map.setMinZoom(map.getZoom() - 1);
+L.control.zoom({ position: "bottomright" }).addTo(map);
 
 // CARTO if there's a key, OSM otherwise
 if (typeof CARTO_KEY !== "undefined" && CARTO_KEY !== "your_key_here") {
   L.tileLayer(`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
     maxZoom: 19,
+    updateWhenZooming: false, // only fetch tiles for the final zoom, not every step of a fly animation
     subdomains: "abcd",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
@@ -23,6 +26,7 @@ if (typeof CARTO_KEY !== "undefined" && CARTO_KEY !== "your_key_here") {
   console.warn("No CARTO key found in config.js, using OpenStreetMap tiles");
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
+    updateWhenZooming: false, // only fetch tiles for the final zoom, not every step of a fly animation
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 }
@@ -109,12 +113,15 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function popupHtml(h) {
-  // "Road & Cross Street", whichever parts exist
+// "Road & Cross Street", whichever parts exist
+function hotspotName(h) {
   const names = [h.top_street, h.cross_street].filter(Boolean);
-  const street = names.length ? escapeHtml(names.join(" & ")) : "Unnamed location";
+  return names.length ? names.join(" & ") : "Unnamed location";
+}
+
+function popupHtml(h) {
   return `
-    <strong>${street}</strong><br>
+    <strong>${escapeHtml(hotspotName(h))}</strong><br>
     Ranked ${ordinal(h.danger_rank)} most dangerous of ${TOTAL_HOTSPOTS.toLocaleString()}<br>
     Crashes: ${h.crash_count}<br>
     Injured: ${Math.round(h.total_injured)}<br>
@@ -187,3 +194,84 @@ fetch(`${API_URL}/hotspots`)
   .then((res) => res.json())
   .then(drawHotspots)
   .catch((err) => console.error("Couldn't load hotspots:", err));
+
+// search: type a street, pick a hotspot, map flies there
+const searchInput = document.getElementById("search-input");
+const searchResults = document.getElementById("search-results");
+let searchTimer = null;
+let latestSearch = 0; // ignore responses that come back after a newer search
+let currentResults = [];
+
+function clearResults() {
+  searchResults.replaceChildren();
+  currentResults = [];
+}
+
+function goToHotspot(h) {
+  clearResults();
+  searchInput.value = hotspotName(h); // show what was picked
+  searchInput.blur();
+  map.flyTo([h.center_lat, h.center_lon], 17, { duration: 1.2 });
+  // wait for the fly animation to finish, or the popup's auto-pan fights it
+  map.once("moveend", () => {
+    L.popup().setLatLng([h.center_lat, h.center_lon]).setContent(popupHtml(h)).openOn(map);
+  });
+}
+
+// textContent instead of innerHTML, so street names can't inject html
+function showResults(hotspots) {
+  currentResults = hotspots;
+  if (hotspots.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "No hotspots found";
+    searchResults.replaceChildren(li);
+    return;
+  }
+  searchResults.replaceChildren(
+    ...hotspots.map((h) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = hotspotName(h);
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = `Ranked ${ordinal(h.danger_rank)} \u00b7 ${h.crash_count} crashes`;
+      button.append(meta);
+      button.addEventListener("click", () => goToHotspot(h));
+      const li = document.createElement("li");
+      li.append(button);
+      return li;
+    })
+  );
+}
+
+function runSearch(query) {
+  const id = ++latestSearch;
+  fetch(`${API_URL}/hotspots/search?query=${encodeURIComponent(query)}&limit=10`)
+    .then((res) => res.json())
+    .then((hotspots) => {
+      if (id === latestSearch) showResults(hotspots);
+    })
+    .catch((err) => console.error("Search failed:", err));
+}
+
+searchInput.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  const query = searchInput.value.trim();
+  if (query.length < 2) {
+    latestSearch++; // cancels any search still in flight
+    clearResults();
+    return;
+  }
+  searchTimer = setTimeout(() => runSearch(query), 250); // wait for a pause in typing
+});
+
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && currentResults.length) goToHotspot(currentResults[0]);
+  if (e.key === "Escape") {
+    searchInput.value = "";
+    clearResults();
+  }
+});
+
+map.on("click", clearResults);
