@@ -35,7 +35,9 @@ CREATE TABLE hotspots (
     fatal_crash_count INTEGER,
     injury_rate DOUBLE PRECISION,
     danger_score DOUBLE PRECISION,
+    danger_rank INTEGER,
     top_factor TEXT,
+    cross_street TEXT,
     geom GEOMETRY(Point, 4326)
 );
 
@@ -50,6 +52,9 @@ CREATE TABLE heatmap_points (
 CREATE INDEX idx_hotspots_geom ON hotspots USING GIST (geom);
 CREATE INDEX idx_heatmap_points_geom ON heatmap_points USING GIST (geom);
 
+-- /nearby casts geom to geography for meters, which can't use the index above
+CREATE INDEX idx_hotspots_geog ON hotspots USING GIST ((geom::geography));
+
 -- ============================================================
 -- BACKFILL GEOM: populate geometry columns from lat/lon
 -- Run AFTER loading data (scripts/load_to_postgres.py). Safe to re-run --
@@ -63,3 +68,12 @@ WHERE geom IS NULL;
 UPDATE heatmap_points
 SET geom = ST_SetSRID(ST_MakePoint(lon, lat), 4326)
 WHERE geom IS NULL;
+
+-- 1 = most dangerous. window functions can't go in SET directly, so rank in a subquery
+UPDATE hotspots h
+SET danger_rank = r.danger_rank
+FROM (
+    SELECT cluster, RANK() OVER (ORDER BY danger_score DESC) AS danger_rank
+    FROM hotspots
+) r
+WHERE h.cluster = r.cluster;

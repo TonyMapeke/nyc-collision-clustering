@@ -6,9 +6,9 @@ Bronx collision hotspot API.
 
 from fastapi import FastAPI, HTTPException, Query
 from sqlalchemy import text
-
 from api.database import engine
 from api.schemas import HeatmapPoint, Hotspot, NearbyHotspot
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Bronx Collision Hotspot API",
@@ -16,11 +16,19 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# the frontend runs on a different port, so the browser needs permission to call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5500", "http://127.0.0.1:5500"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 # TRIM because the NYC data pads street names with trailing spaces
 HOTSPOT_COLUMNS = """
     cluster, crash_count, center_lat, center_lon, TRIM(top_street) AS top_street,
     total_injured, total_killed, fatal_crash_count, injury_rate,
-    danger_score, top_factor
+    danger_score, danger_rank, top_factor, TRIM(cross_street) AS cross_street
 """
 
 # ::geography so distances come back in meters, not degrees
@@ -50,14 +58,14 @@ def search_hotspots(
     query: str = Query(..., min_length=2, description="Street name to search for"),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """Street name search. Substring match, case-insensitive."""
+    """Street name search on either street. Substring match, case-insensitive."""
     with engine.connect() as conn:
         rows = conn.execute(
             text(
                 f"""
                 SELECT {HOTSPOT_COLUMNS}
                 FROM hotspots
-                WHERE top_street ILIKE :pattern
+                WHERE top_street ILIKE :pattern OR cross_street ILIKE :pattern
                 ORDER BY danger_score DESC
                 LIMIT :limit
                 """
