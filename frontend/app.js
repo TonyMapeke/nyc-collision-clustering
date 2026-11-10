@@ -274,7 +274,10 @@ function rankColor(rank) {
   return TIER_COLORS[rankTier(rank)];
 }
 
+let allHotspots = [];
+
 function drawHotspots(hotspots) {
+  allHotspots = hotspots;
   TOTAL_HOTSPOTS = hotspots.length;
   // api sends most dangerous first, so add in reverse to draw those on top
   for (const h of [...hotspots].reverse()) {
@@ -343,16 +346,20 @@ function clearResults() {
   currentResults = [];
 }
 
+// fly to a hotspot, then open a popup once the map stops
+// listen before moving: setView fires moveend right away, so listening after would miss it
+function flyToHotspot(h, content) {
+  const latlng = [h.center_lat, h.center_lon];
+  map.once("moveend", () => L.popup(POPUP_OPTIONS).setLatLng(latlng).setContent(content).openOn(map));
+  if (REDUCE_MOTION) map.setView(latlng, 17);
+  else map.flyTo(latlng, 17, { duration: 1.2 });
+}
+
 function goToHotspot(h) {
   clearResults();
   searchInput.value = hotspotName(h); // show what was picked
   searchInput.blur();
-  if (REDUCE_MOTION) map.setView([h.center_lat, h.center_lon], 17);
-  else map.flyTo([h.center_lat, h.center_lon], 17, { duration: 1.2 });
-  // wait for the fly animation to finish, or the popup's auto-pan fights it
-  map.once("moveend", () => {
-    L.popup(POPUP_OPTIONS).setLatLng([h.center_lat, h.center_lon]).setContent(popupHtml(h)).openOn(map);
-  });
+  flyToHotspot(h, popupHtml(h));
 }
 
 // textContent instead of innerHTML, so street names can't inject html
@@ -412,5 +419,62 @@ searchInput.addEventListener("keydown", (e) => {
 });
 
 map.on("click", clearResults);
+
+// tour: fly through the top 3 hotspots, each with a sentence on why it ranks there
+const TOUR_LENGTH = 3;
+
+// written from the data, so it stays true if the pipeline is rerun
+function tourNote(h) {
+  const maxKilled = Math.max(...allHotspots.map((x) => x.total_killed));
+  const maxCrashes = Math.max(...allHotspots.map((x) => x.crash_count));
+  const killed = Math.round(h.total_killed);
+  const crashes = h.crash_count.toLocaleString();
+  const deaths = `${killed} ${killed === 1 ? "person" : "people"} killed`;
+  if (h.total_killed === maxKilled && killed > 0) {
+    return `The most deaths of any hotspot in the Bronx: ${deaths} in ${crashes} crashes.`;
+  }
+  if (h.crash_count === maxCrashes) {
+    return killed === 0
+      ? `The most crashes of any Bronx hotspot, but no one has died here, so it ranks below corners with fewer crashes.`
+      : `The most crashes of any Bronx hotspot, with ${deaths}.`;
+  }
+  return `${deaths} and ${Math.round(h.total_injured).toLocaleString()} injured in ${crashes} crashes.`;
+}
+
+// popup content as an element, so the buttons can get click handlers
+function tourContent(step) {
+  const h = allHotspots[step];
+  const last = step === TOUR_LENGTH - 1;
+  const el = document.createElement("div");
+  el.innerHTML = `
+    ${popupHtml(h)}
+    <div class="tour">
+      <p class="tour-note">${escapeHtml(tourNote(h))}</p>
+      <div class="tour-nav">
+        <span class="tour-step">Stop ${step + 1} of ${TOUR_LENGTH}</span>
+        <span class="tour-buttons">
+          ${step > 0 ? '<button type="button" data-go="back">Back</button>' : ""}
+          <button type="button" class="primary" data-go="next">${last ? "Explore the map" : "Next"}</button>
+        </span>
+      </div>
+    </div>`;
+  el.querySelector('[data-go="next"]').addEventListener("click", () => (last ? endTour() : tourStep(step + 1)));
+  el.querySelector('[data-go="back"]')?.addEventListener("click", () => tourStep(step - 1));
+  return el;
+}
+
+function tourStep(step) {
+  map.closePopup();
+  flyToHotspot(allHotspots[step], tourContent(step));
+}
+
+function endTour() {
+  map.closePopup();
+  map.fitBounds(BRONX_BOUNDS, { animate: !REDUCE_MOTION });
+}
+
+document.getElementById("tour-start").addEventListener("click", () => {
+  if (allHotspots.length >= TOUR_LENGTH) tourStep(0);
+});
 
 renderLegend(false);

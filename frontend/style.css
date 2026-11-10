@@ -125,6 +125,84 @@ body {
   color: var(--muted);
 }
 
+.tour-start {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 12px 7px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--sign-green);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tour-start:hover {
+  background: #005632;
+}
+
+.tour-start:focus-visible,
+.tour button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* hide the tour button while search results are open */
+#search-results:not(:empty) + .tour-start {
+  display: none;
+}
+
+/* ---------- tour footer inside the popup ---------- */
+
+.tour {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.hs-popup .leaflet-popup-content p.tour-note {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tour-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tour-step {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tour-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.tour button {
+  padding: 6px 10px 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tour button.primary {
+  color: #fff;
+  background: var(--sign-green);
+  border-color: var(--sign-green);
+}
+
 /* ---------- legend ---------- */
 
 #legend {
