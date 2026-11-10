@@ -161,6 +161,8 @@ function drawHeatmap(points, boundary) {
   }
 
   heatLayer = L.imageOverlay(output.toDataURL(), bounds, { className: "heat-intro" }).addTo(map); // fades in after the outline draws
+  // only fade in once: the image gets removed and re-added when zooming past 16, which would replay it
+  heatLayer.getElement().addEventListener("animationend", (e) => e.target.classList.remove("heat-intro"), { once: true });
   updateLayers();
 }
 
@@ -358,10 +360,19 @@ function drawHotspots(hotspots) {
 }
 
 function updateLayers() {
-  const zoomedIn = map.getZoom() >= DETAIL_ZOOM;
-  if (heatLayer) heatLayer.setOpacity(zoomedIn ? 0.15 : 1); // keep a faint heatmap for context
-  if (zoomedIn) hotspotLayer.addTo(map);
-  else hotspotLayer.remove();
+  const zoom = map.getZoom();
+  const zoomedIn = zoom >= DETAIL_ZOOM;
+  if (heatLayer) {
+    heatLayer.setOpacity(zoomedIn ? 0.15 : 1); // keep a faint heatmap for context
+    // past 16 the image gets stretched to tens of thousands of pixels just for a faint tint, so drop it
+    if (zoom > DETAIL_ZOOM) heatLayer.remove();
+    else heatLayer.addTo(map);
+  }
+  // draw circles on the next frame, so a popup opening at the same moment shows up first
+  requestAnimationFrame(() => {
+    if (map.getZoom() >= DETAIL_ZOOM) hotspotLayer.addTo(map);
+    else hotspotLayer.remove();
+  });
   renderLegend(zoomedIn);
 }
 
@@ -413,8 +424,9 @@ function clearResults() {
 function flyToHotspot(h, content) {
   const latlng = [h.center_lat, h.center_lon];
   map.once("moveend", () => hotspotPopup(h).setLatLng(latlng).setContent(content).openOn(map));
-  if (REDUCE_MOTION) map.setView(latlng, 17);
-  else map.flyTo(latlng, 17, { duration: 1.2 });
+  // DETAIL_ZOOM is street level with circles showing, and far fewer tiles to fetch than one level deeper
+  if (REDUCE_MOTION) map.setView(latlng, DETAIL_ZOOM);
+  else map.flyTo(latlng, DETAIL_ZOOM, { duration: 1.2 });
 }
 
 function goToHotspot(h) {
