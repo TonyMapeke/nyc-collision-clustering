@@ -244,6 +244,13 @@ function popupHtml(h) {
 
 const POPUP_OPTIONS = { className: "hs-popup", maxWidth: 300 };
 
+// a popup that remembers which hotspot it's for, so the selection ring knows where to go
+function hotspotPopup(h) {
+  const popup = L.popup(POPUP_OPTIONS);
+  popup.hotspot = h;
+  return popup;
+}
+
 map.on("click", (e) => {
   const { lat, lng } = e.latlng; // leaflet calls it lng, the api calls it lon
   fetch(`${API_URL}/hotspots/nearby?lat=${lat}&lon=${lng}&radius=500&limit=1`)
@@ -254,7 +261,7 @@ map.on("click", (e) => {
         return;
       }
       const h = hotspots[0];
-      L.popup(POPUP_OPTIONS)
+      hotspotPopup(h)
         .setLatLng([h.center_lat, h.center_lon]) // open on the hotspot, not the click
         .setContent(popupHtml(h))
         .openOn(map);
@@ -276,13 +283,39 @@ function rankColor(rank) {
 
 let allHotspots = [];
 
+// sqrt so huge clusters don't cover everything
+function circleRadius(h) {
+  return Math.min(14, Math.max(4, Math.sqrt(h.crash_count)));
+}
+
+// ring around whichever hotspot's popup is open, so you can see which circle it belongs to
+let selectedRing = null;
+
+map.on("popupopen", (e) => {
+  const h = e.popup.hotspot;
+  if (!h) return; // e.g. the "no hotspots nearby" popup
+  const size = circleRadius(h) * 2 + 12;
+  selectedRing = L.marker([h.center_lat, h.center_lon], {
+    icon: L.divIcon({ className: "selected-ring", iconSize: [size, size] }),
+    interactive: false,
+    keyboard: false,
+  }).addTo(map);
+});
+
+// leaflet closes the old popup before opening the next, so this runs first on a switch
+map.on("popupclose", () => {
+  if (selectedRing) selectedRing.remove();
+  selectedRing = null;
+});
+
 function drawHotspots(hotspots) {
   allHotspots = hotspots;
   TOTAL_HOTSPOTS = hotspots.length;
   // api sends most dangerous first, so add in reverse to draw those on top
   for (const h of [...hotspots].reverse()) {
-    L.circleMarker([h.center_lat, h.center_lon], {
-      radius: Math.min(14, Math.max(4, Math.sqrt(h.crash_count))), // sqrt so huge clusters don't cover everything
+    const radius = circleRadius(h);
+    const circle = L.circleMarker([h.center_lat, h.center_lon], {
+      radius,
       color: "#ffffff",
       weight: 1,
       fillColor: rankColor(h.danger_rank),
@@ -290,7 +323,11 @@ function drawHotspots(hotspots) {
       bubblingMouseEvents: false, // clicking a circle shouldn't also trigger the map's /nearby click
     })
       .bindPopup(() => popupHtml(h), POPUP_OPTIONS)
+      .bindTooltip(escapeHtml(hotspotName(h)), { direction: "top", offset: [0, -radius], className: "hs-tooltip" })
+      .on("mouseover", () => circle.setRadius(radius + 2)) // grow a little so it's clear what you're on
+      .on("mouseout", () => circle.setRadius(radius))
       .addTo(hotspotLayer);
+    circle.getPopup().hotspot = h;
   }
   updateLayers();
 }
@@ -350,7 +387,7 @@ function clearResults() {
 // listen before moving: setView fires moveend right away, so listening after would miss it
 function flyToHotspot(h, content) {
   const latlng = [h.center_lat, h.center_lon];
-  map.once("moveend", () => L.popup(POPUP_OPTIONS).setLatLng(latlng).setContent(content).openOn(map));
+  map.once("moveend", () => hotspotPopup(h).setLatLng(latlng).setContent(content).openOn(map));
   if (REDUCE_MOTION) map.setView(latlng, 17);
   else map.flyTo(latlng, 17, { duration: 1.2 });
 }
