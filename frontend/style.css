@@ -206,10 +206,38 @@ body {
 }
 
 .hs-name {
-  margin: 0 18px 6px 0; /* room for the close button */
+  margin: 0 18px 8px 0; /* room for the close button */
   font-size: 17px;
   font-weight: 800;
   line-height: 1.2;
+}
+
+/* stacked mini street signs, same look as the title sign */
+.corner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.corner-sign {
+  padding: 5px 9px 3px;
+  background: var(--sign-green);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px var(--sign-green), inset 0 0 0 3.5px #fff;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .hs-rank {
