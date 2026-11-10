@@ -13,8 +13,9 @@ map.setMinZoom(map.getZoom() - 1);
 L.control.zoom({ position: "bottomright" }).addTo(map);
 
 // CARTO if there's a key, OSM otherwise
+let tiles;
 if (typeof CARTO_KEY !== "undefined" && CARTO_KEY !== "your_key_here") {
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
+  tiles = L.tileLayer(`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
     maxZoom: 19,
     updateWhenZooming: false, // only fetch tiles for the final zoom, not every step of a fly animation
     subdomains: "abcd",
@@ -24,12 +25,19 @@ if (typeof CARTO_KEY !== "undefined" && CARTO_KEY !== "your_key_here") {
   }).addTo(map);
 } else {
   console.warn("No CARTO key found in config.js, using OpenStreetMap tiles");
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     updateWhenZooming: false, // only fetch tiles for the final zoom, not every step of a fly animation
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 }
+
+// the opening animation waits (css paused) until the streets have loaded, otherwise it plays behind blank tiles
+function startIntro() {
+  document.getElementById("map").classList.add("map-ready");
+}
+tiles.once("load", startIntro);
+setTimeout(startIntro, 3000); // don't wait forever if tiles are slow or blocked
 
 // yellow to dark red
 const HEAT_COLORS = [
@@ -70,8 +78,25 @@ function drawBoundary(geojson) {
   const rings = boundaryRings(geojson).map((ring) => ring.map(([lon, lat]) => [lat, lon])); // geojson is lon, lat
   const world = [[85, -180], [85, 180], [-85, 180], [-85, -180]];
   // first ring is the outer edge, the rest are holes, so this covers everything except the bronx
-  L.polygon([world, ...rings], { stroke: false, fillColor: "#1e2a33", fillOpacity: 0.12, interactive: false }).addTo(map);
-  L.polygon(rings, { color: "#1e2a33", weight: 1.5, opacity: 0.6, fill: false, interactive: false }).addTo(map);
+  const renderer = L.svg(); // svg instead of canvas so css can animate these two on load
+  L.polygon([world, ...rings], {
+    stroke: false,
+    fillColor: "#1e2a33",
+    fillOpacity: 0.12,
+    interactive: false,
+    renderer,
+    className: "borough-mask",
+  }).addTo(map);
+  const outline = L.polygon(rings, {
+    color: "#1e2a33",
+    weight: 1.5,
+    opacity: 0.6,
+    fill: false,
+    interactive: false,
+    renderer,
+    className: "borough-outline",
+  }).addTo(map);
+  outline.getElement().setAttribute("pathLength", "1"); // lets css animate the stroke without knowing its real length
 }
 
 // leaflet stretches overlays in web mercator, so the clip shape has to be placed in mercator too
@@ -135,7 +160,7 @@ function drawHeatmap(points, boundary) {
     big.fill("evenodd");
   }
 
-  heatLayer = L.imageOverlay(output.toDataURL(), bounds).addTo(map);
+  heatLayer = L.imageOverlay(output.toDataURL(), bounds, { className: "heat-intro" }).addTo(map); // fades in after the outline draws
   updateLayers();
 }
 
