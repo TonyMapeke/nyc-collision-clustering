@@ -173,6 +173,37 @@ function titleCase(text) {
   return text.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 }
 
+// how nyc street signs shorten names: "EAST 138 STREET" -> "E 138 St"
+const SIGN_WORDS = {
+  STREET: "St", AVENUE: "Av", ROAD: "Rd", BOULEVARD: "Blvd", PARKWAY: "Pkwy",
+  EXPRESSWAY: "Expy", PLACE: "Pl", DRIVE: "Dr", LANE: "Ln", TERRACE: "Ter",
+  COURT: "Ct", SQUARE: "Sq", PLAZA: "Plz", HIGHWAY: "Hwy",
+};
+const DIRECTIONS = { EAST: "E", WEST: "W", NORTH: "N", SOUTH: "S" };
+const NOT_DIRECTIONS = ["WEST FARMS"]; // a neighborhood name, not "west"
+
+function signName(street) {
+  const upper = street.trim().toUpperCase();
+  const words = upper.split(/\s+/);
+  const keepFirst = NOT_DIRECTIONS.some((name) => upper.startsWith(name));
+  return words
+    .map((word, i) => {
+      if (i === 0 && words.length > 1 && !keepFirst && DIRECTIONS[word]) return DIRECTIONS[word];
+      if (i === words.length - 1 && SIGN_WORDS[word]) return SIGN_WORDS[word]; // only the street type at the end
+      return titleCase(word);
+    })
+    .join(" ");
+}
+
+// popup heading: one green sign per street, stacked like a corner post
+function cornerSigns(h) {
+  const streets = [h.top_street, h.cross_street].filter(Boolean);
+  if (!streets.length) return `<h2 class="hs-name">Unnamed location</h2>`;
+  const signs = streets.map((s) => `<span class="corner-sign">${escapeHtml(signName(s))}</span>`).join("");
+  // screen readers get the full name, the signs are visual only
+  return `<h2 class="hs-name"><span class="visually-hidden">${escapeHtml(hotspotName(h))}</span><span class="corner" aria-hidden="true">${signs}</span></h2>`;
+}
+
 // "Road & Cross Street", whichever parts exist
 function hotspotName(h) {
   const names = [h.top_street, h.cross_street].filter(Boolean).map(titleCase);
@@ -187,9 +218,10 @@ function rankTier(rank) {
   return 4;
 }
 
-// "Unspecified" means the police report didn't record a cause
+// "Unspecified" now only comes through when no crash at this hotspot had a recorded cause
 function causeText(factor) {
   if (!factor || factor === "Unspecified") return "Not recorded";
+  if (factor === "Other") return "A mix of less common causes"; // the bucket for the 54 rarer causes
   return factor;
 }
 
@@ -197,7 +229,7 @@ function popupHtml(h) {
   const killed = Math.round(h.total_killed);
   const distance = h.distance_meters != null ? `<span>${Math.round(h.distance_meters)} m from where you clicked</span>` : "";
   return `
-    <h2 class="hs-name">${escapeHtml(hotspotName(h))}</h2>
+    ${cornerSigns(h)}
     <p class="hs-rank"><span class="dot tier-${rankTier(h.danger_rank)}"></span>Ranked ${ordinal(h.danger_rank)} of ${TOTAL_HOTSPOTS.toLocaleString()} for danger</p>
     <dl class="hs-stats">
       <div><dt>Crashes</dt><dd>${h.crash_count.toLocaleString()}</dd></div>
@@ -205,7 +237,7 @@ function popupHtml(h) {
       <div><dt>People injured</dt><dd>${Math.round(h.total_injured).toLocaleString()}</dd></div>
       <div><dt>Crashes with injuries</dt><dd>${Math.round(h.injury_rate)}%</dd></div>
     </dl>
-    <p class="hs-cause">Most common cause: ${escapeHtml(causeText(h.top_factor))}</p>
+    <p class="hs-cause">Most common recorded cause: ${escapeHtml(causeText(h.top_factor))}</p>
     <p class="hs-foot">Danger score ${h.danger_score.toFixed(2)} ${distance ? "<br>" + distance : ""}</p>
   `;
 }
