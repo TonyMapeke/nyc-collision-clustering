@@ -12,11 +12,9 @@
 --
 -- Order of operations for a full rebuild from empty:
 --   (a) Run the STRUCTURE section below to create the extension, tables, and indexes.
---   (b) Run scripts/load_to_postgres.py to load bronx_cluster_summary_scored.csv
---       and bronx_density_heatmap.csv into the now-empty tables.
---   (c) Run the BACKFILL GEOM section below to populate the geom columns from
---       the freshly-loaded lat/lon values. (Running it before step (b) is harmless
---       but accomplishes nothing -- WHERE geom IS NULL matches zero rows on empty tables.)
+--   (b) Run scripts/load_to_postgres.py. It loads both CSVs and runs the backfill
+--       statements below itself, so step (b) is the whole data load.
+--   The BACKFILL section is kept here as a record, and for running by hand if needed.
 
 -- ============================================================
 -- STRUCTURE: extension, tables, indexes

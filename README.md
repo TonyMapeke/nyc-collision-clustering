@@ -82,7 +82,8 @@ Then, connected to `bronx_collisions`:
 
 1. Run the structure section of `sql/schema.sql` (tables and indexes)
 2. Load the data: `python scripts/load_to_postgres.py`
-3. Run the backfill section of `sql/schema.sql` (fills in the geometry columns and danger ranks)
+
+The load script empties the tables, loads both CSVs, and fills in the geometry columns and danger ranks in a single transaction, so it's also how you reload after rerunning the notebooks.
 
 **4. Start the API**
 
