@@ -14,7 +14,7 @@ class Hotspot(BaseModel):
     crash_count: int
     center_lat: float
     center_lon: float
-    top_street: Optional[str] = None  # 715 clusters have no street name
+    top_street: Optional[str] = None  # a few hotspots have no street name
     total_injured: float
     total_killed: float
     fatal_crash_count: int

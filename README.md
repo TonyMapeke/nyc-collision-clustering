@@ -1,12 +1,12 @@
 # Bronx Collision Hotspot Analysis
 
-Finds the most dangerous places to be on a Bronx road by clustering 225K+ motor vehicle collisions into hotspots and ranking them by harm, not just crash count. Results are served through a FastAPI + PostGIS backend to an interactive Leaflet map where you can search streets, click anywhere for the nearest hotspot, and zoom from a borough-wide heatmap down to individual intersections.
+Finds the most dangerous places to be on a Bronx road by clustering 306K+ motor vehicle collisions into hotspots and ranking them by harm, not just crash count. Results are served through a FastAPI + PostGIS backend to an interactive Leaflet map where you can search streets, click anywhere for the nearest hotspot, and zoom from a borough-wide heatmap down to individual intersections.
 
 ## Why severity, not frequency
 
-Ranking locations by raw crash count mostly tells you where traffic is heaviest. West Fordham Road has the most crashes of any hotspot in the Bronx (1,027), but none of them were fatal.
+Ranking locations by raw crash count mostly tells you where traffic is heaviest. West Fordham Road at the Major Deegan Expressway has the second most crashes of any hotspot in the Bronx (1,310) and the most injuries (630), but no deaths. It ranks eighth.
 
-Weighting by injuries and fatalities changes the picture. East 138 Street has only 208 crashes but four deaths, the most of any hotspot, and it ranks first. Several lower-volume locations on Southern Boulevard, the Grand Concourse, and White Plains Road also move into the top 10 for the same reason. A frequency-only ranking would have buried all of them.
+Weighting by injuries and fatalities changes the picture. East 138 Street & Willis Avenue has only 227 crashes but four deaths, tied for the most of any hotspot, and ranks second. Allerton Avenue & Holland Avenue has just 69 crashes, also with four deaths, and ranks fifth. A frequency-only ranking would have buried both. The top spot, Bruckner Boulevard & Hunts Point Avenue, earns it on total harm: the most crashes in the borough (1,383) and the second most injuries (563).
 
 Each factor is min-max scaled to 0–1 before weighting. Without that step, crash counts (which run into the thousands) drowned out fatalities (which top out at four), and the first version of the score just reproduced the crash-count ranking.
 
@@ -14,10 +14,10 @@ Each factor is min-max scaled to 0–1 before weighting. Without that step, cras
 
 | Stage | Notebook | What happens |
 |---|---|---|
-| Collection | `01_data_collection.ipynb` | Pulls every Bronx collision from NYC Open Data's Socrata API (234,088 rows). An early pull with a fixed row limit silently stopped at 200,000 rows, so it now pages through in batches of 50,000, ordered by `collision_id` so pages never overlap or skip rows. |
-| Cleaning / EDA | `02_exploratory_data_analysis.ipynb` | Drops missing and `0,0` placeholder coordinates, then spatially joins against NYC's official borough boundary to remove points geocoded outside the Bronx (225,012 rows remain). Looks at temporal patterns, injury/fatality rates, and contributing factors. |
-| Clustering | `03_bronx_clustering.ipynb` | Reprojects to UTM Zone 18N (meters) and runs DBSCAN. Final parameters are `eps=20m`, `min_samples=10`, giving 4,465 hotspots. Larger `eps` values chained whole corridors together; smaller ones added noise without improving the clusters. At this scale a hotspot is a stretch of road with repeated crashes, not a single intersection. |
-| Severity scoring | `04_severity_weighting.ipynb` | Scores each hotspot on crash count, injuries, and fatalities (MinMax-normalized, fatalities weighted 2x). Also finds each hotspot's most common contributing factor and cross street, so hotspots are labeled like "East Gun Hill Road & Webster Avenue." |
+| Collection | `01_data_collection.ipynb` | Pulls every Bronx collision from NYC Open Data's Socrata API (330,480 rows, pulled November 21, 2026). That's crashes labeled Bronx plus crashes with no borough recorded whose coordinates fall in a box around the Bronx. About 72,000 Bronx crashes, many on highways like the Major Deegan and Cross Bronx, have no borough and were missing from earlier versions. An early pull with a fixed row limit silently stopped at 200,000 rows, so it now pages through in batches of 50,000, ordered by `collision_id` so pages never overlap or skip rows. |
+| Cleaning / EDA | `02_exploratory_data_analysis.ipynb` | Drops missing and `0,0` placeholder coordinates, then spatially joins against NYC's official borough boundary to remove points geocoded outside the Bronx, including the parts of the box that aren't in the Bronx (306,641 rows remain). Looks at temporal patterns, injury/fatality rates, and contributing factors. |
+| Clustering | `03_bronx_clustering.ipynb` | Reprojects to UTM Zone 18N (meters) and runs DBSCAN. Final parameters are `eps=20m`, `min_samples=10`, giving 5,324 hotspots. Larger `eps` values chained whole corridors together; smaller ones added noise without improving the clusters. At this scale a hotspot is a busy intersection or a short stretch of road; the widest spans about 300 meters. Rechecked after adding the highway crashes, to make sure they didn't chain into long strips. |
+| Severity scoring | `04_severity_weighting.ipynb` | Scores each hotspot on crash count, injuries, and fatalities (MinMax-normalized, fatalities weighted 2x). Also finds each hotspot's most common contributing factor and cross street, so hotspots are labeled like "East Gun Hill Road & Webster Avenue." Street names are cleaned first: house numbers stripped, abbreviations like `EXPY` and `E` spelled out, and address-only records used as a fallback. |
 | Density heatmap | `05_density_heatmap.ipynb` | Builds a severity-weighted kernel density surface over the whole borough and exports it as a 100×100 grid, so the heatmap agrees with the hotspot ranking. |
 | Database | `sql/schema.sql`, `scripts/load_to_postgres.py` | Loads hotspots and the heatmap grid into PostgreSQL with PostGIS point geometry and GiST spatial indexes, and ranks hotspots with a SQL window function. |
 | API | `api/` | FastAPI endpoints for the heatmap, all hotspots, street search, nearest-hotspot lookup, and hotspot detail. |
@@ -124,21 +124,23 @@ Without it, the map falls back to standard OpenStreetMap tiles.
 
 ## Data notes
 
-- Only 2 of 4,465 hotspots are unnamed. Originally 715 had no name, since every crash in them was missing `on_street_name`. Most of those crashes still had a cross street, so pooling both street columns recovered nearly all of them.
-- "Unspecified" is the single most common contributing factor (~41% of crashes), so `top_factor` often reads "Unspecified".
+- Only 1 of 5,324 hotspots has no street name. About 20% of crashes record their location only as an address in `off_street_name`, with `on_street_name` and `cross_street_name` blank, so the cleaning falls back to that field.
+- The dataset's format changed between the June and November 2026 pulls: `collision_id` went from numbers to 32-character IDs, newer records abbreviate street names, and a new "Does Not Apply" cause appeared. The cleaning handles both formats.
+- About 39% of crashes have no recorded cause ("Unspecified", or "Does Not Apply" in newer records, which are merged). `top_factor` is the most common cause that was actually recorded.
+- `00:00` is the most common crash time, more than 4 PM, the busiest hour. Crashes with an unknown time were most likely logged as midnight, so the late-night counts are inflated. Nothing downstream uses time, so those rows stay in.
 - Some fatal crashes list zero injuries. That's how this dataset reports the two fields (a person killed isn't always also counted as injured), not a cleaning error.
-- 2026 data only runs through mid-year, and recent years may still be affected by reporting lag.
+- The data was pulled on November 21, 2026. The most recent months may still be affected by reporting lag.
 - The danger score measures total harm at a location, not harm per crash, so busy corridors still get credit for volume. A per-crash rate would favor quieter roads with unusually severe crashes instead. Total harm was the deliberate choice here.
 
 ## Status
 
-v1 is complete: the data pipeline, database, API, and map all work end to end locally.
+The data pipeline, database, API, and map all work end to end locally, including the design pass (street-sign styling, a zoom-aware legend, a guided tour of the top three hotspots, and the heatmap clipped to the Bronx outline).
 
 Next up:
 
-- Design pass: styling, a color legend, and clipping the heatmap to the Bronx outline
+- Deployment, so the map has a live link
 - API tests with pytest
-- Docker setup and deployment
+- Docker setup
 - Filtering by year, severity, or cause
 
 ## Data source
