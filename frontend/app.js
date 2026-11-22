@@ -5,8 +5,8 @@ const BRONX_BOUNDS = L.latLngBounds([40.78, -73.95], [40.92, -73.74]);
 const map = L.map("map", {
   maxBounds: BRONX_BOUNDS.pad(0.5), // some room around the edges so it doesn't feel too tight
   maxBoundsViscosity: 1.0,          // hard wall, can't drag past
-  preferCanvas: true,
-  zoomControl: false,               // re-added bottom right so it doesn't sit under the search bar               // 4,465 circles draw much faster on canvas than as svg
+  preferCanvas: true,               // thousands of circles draw much faster on canvas than as svg
+  zoomControl: false,               // re-added bottom right so it doesn't sit under the search bar
 }).fitBounds(BRONX_BOUNDS);
 
 map.setMinZoom(map.getZoom() - 1);
@@ -179,7 +179,7 @@ Promise.all([fetch(`${API_URL}/heatmap`).then((res) => res.json()), boundaryRequ
   })
   .catch((err) => console.error("Couldn't load heatmap:", err));
 
-let TOTAL_HOTSPOTS = 4465; // replaced with the real count once /hotspots loads
+let TOTAL_HOTSPOTS = 5324; // replaced with the real count once /hotspots loads
 
 // 1 -> 1st, 2 -> 2nd, 11 -> 11th, 22 -> 22nd
 function ordinal(n) {
@@ -504,8 +504,9 @@ function tourNote(h) {
   const killed = Math.round(h.total_killed);
   const crashes = h.crash_count.toLocaleString();
   const deaths = `${killed} ${killed === 1 ? "person" : "people"} killed`;
+  const tiedForMost = allHotspots.filter((x) => x.total_killed === maxKilled).length > 1;
   if (h.total_killed === maxKilled && killed > 0) {
-    return `The most deaths of any hotspot in the Bronx: ${deaths} in ${crashes} crashes.`;
+    return `${tiedForMost ? "Tied for the most" : "The most"} deaths of any hotspot in the Bronx: ${deaths} in ${crashes} crashes.`;
   }
   if (h.crash_count === maxCrashes) {
     return killed === 0
